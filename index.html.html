@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EstoqueFácil - HOSPMED Cloud</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .pulse-dot { animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.4;} }
+    .spinner { border: 3px solid #e2e8f0; border-top: 3px solid #10b981; border-radius: 50%; width: 16px; height: 16px; animation: spin 0.8s linear infinite; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+  <!-- ================= CONFIGURAÇÃO INICIAL (só aparece 1x) ================= -->
+  <div id="tela-config" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4">
+      <h2 class="text-lg font-bold text-slate-800">⚙️ Configuração Inicial</h2>
+      <p class="text-sm text-slate-500">Cole aqui a URL do seu Google Apps Script (você recebe isso no passo 6 do guia de instalação).</p>
+      <input type="text" id="input-url-script" placeholder="https://script.google.com/macros/s/....../exec" class="w-full p-3 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-emerald-500">
+      <button onclick="salvarConfiguracao()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition-all">Salvar e Conectar</button>
+      <p class="text-xs text-slate-400 text-center">Essa URL fica salva neste navegador. Você só precisa colar 1 vez.</p>
+    </div>
+  </div>
+
+  <!-- ================= CABEÇALHO ================= -->
+  <header class="bg-hospmed-dark text-white px-6 py-4 shadow-lg flex flex-col md:flex-row justify-between items-center gap-4" style="background:#0f172a;">
+    <div class="flex items-center gap-4">
+      <div class="w-12 h-12 rounded-full flex items-center justify-center shadow-md" style="background:#10b981;">
+        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-xl font-bold tracking-tight">Estoque<span style="color:#10b981;">Fácil</span></h1>
+          <span class="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">CLOUD v4.0</span>
+        </div>
+        <p class="text-xs text-slate-400 tracking-wider font-semibold uppercase">Sincronizado com Google Sheets • HOSPMED</p>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-3">
+      <div class="bg-slate-800/80 border border-slate-700 px-3.5 py-1.5 rounded-full flex items-center gap-2">
+        <span id="sync-dot" class="w-2.5 h-2.5 rounded-full bg-yellow-500 pulse-dot"></span>
+        <span id="sync-texto" class="text-xs font-semibold text-slate-300">Conectando...</span>
+      </div>
+      <button onclick="abrirModalProduto()" class="text-white font-bold text-sm px-4 py-2 rounded-lg flex items-center gap-2 shadow-lg transition-all active:scale-95" style="background:#10b981;">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
+        Novo Produto
+      </button>
+      <button onclick="abrirModalMovimentacao()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm px-4 py-2 rounded-lg flex items-center gap-2 shadow-lg transition-all active:scale-95">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
+        Movimentação
+      </button>
+    </div>
+  </header>
+
+  <!-- ================= MENU ================= -->
+  <nav class="bg-white border-b border-slate-200 px-6 overflow-x-auto no-scrollbar shadow-sm">
+    <div class="flex gap-8">
+      <button onclick="mudarAba('painel')" id="tab-painel" class="tab-btn py-4 border-b-2 font-bold text-sm flex items-center gap-2 transition-all shrink-0"></button>
+      <button onclick="mudarAba('cadastro')" id="tab-cadastro" class="tab-btn py-4 border-b-2 font-semibold text-sm flex items-center gap-2 transition-all shrink-0"></button>
+      <button onclick="mudarAba('movimentacoes')" id="tab-movimentacoes" class="tab-btn py-4 border-b-2 font-semibold text-sm flex items-center gap-2 transition-all shrink-0"></button>
+      <button onclick="mudarAba('importacao')" id="tab-importacao" class="tab-btn py-4 border-b-2 font-semibold text-sm flex items-center gap-2 transition-all shrink-0"></button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-6 max-w-7xl w-full mx-auto">
+
+    <!-- ================= PAINEL ================= -->
+    <section id="conteudo-painel" class="space-y-6">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+          <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Estoque Físico Total</p>
+          <h3 id="card-total-itens" class="text-3xl font-extrabold text-slate-800 mt-2">0</h3>
+          <p id="card-total-produtos" class="text-xs text-slate-500 mt-1">0 produtos cadastrados</p>
+        </div>
+        <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+          <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Patrimônio Líquido</p>
+          <h3 id="card-patrimonio" class="text-3xl font-extrabold text-slate-800 mt-2">R$ 0,00</h3>
+        </div>
+        <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+          <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Estoque Crítico</p>
+          <h3 id="card-critico" class="text-3xl font-extrabold text-slate-800 mt-2">0</h3>
+          <p id="card-critico-desc" class="text-xs text-slate-500 mt-1">Tudo seguro!</p>
+        </div>
+        <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+          <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total de Transações</p>
+          <h3 id="card-movimentacoes" class="text-3xl font-extrabold text-slate-800 mt-2">0</h3>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6 lg:col-span-2">
+          <h4 class="text-lg font-bold text-slate-800 mb-4">Últimas Movimentações</h4>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead><tr class="text-slate-400 font-bold border-b border-slate-100">
+                <th class="pb-3">PRODUTO</th><th class="pb-3">DATA</th><th class="pb-3">TIPO</th><th class="pb-3 text-right">QTD</th>
+              </tr></thead>
+              <tbody id="tabela-movimentacoes-painel" class="divide-y divide-slate-50 text-slate-600"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+          <h4 class="text-lg font-bold text-slate-800 mb-4">Alertas de Reposição</h4>
+          <div id="lista-alertas" class="space-y-3 max-h-[320px] overflow-y-auto"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CADASTRO ================= -->
+    <section id="conteudo-cadastro" class="hidden bg-white rounded-xl shadow-sm border border-slate-100 p-6 space-y-6">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <h3 class="text-lg font-bold text-slate-800">Catálogo de Produtos</h3>
+        <input type="text" id="busca-produto" oninput="listarProdutos()" placeholder="Pesquisar produto..." class="w-full md:w-64 px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500">
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead><tr class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[11px]">
+            <th class="py-3 px-4">Código</th><th class="py-3 px-4">Nome</th><th class="py-3 px-4 text-center">Unid.</th>
+            <th class="py-3 px-4 text-right">Preço</th><th class="py-3 px-4 text-right">Estoque</th><th class="py-3 px-4 text-center">Status</th><th class="py-3 px-4 text-center">Ações</th>
+          </tr></thead>
+          <tbody id="tabela-produtos" class="divide-y divide-slate-100 text-slate-600"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ================= MOVIMENTAÇÕES ================= -->
+    <section id="conteudo-movimentacoes" class="hidden bg-white rounded-xl shadow-sm border border-slate-100 p-6 space-y-6">
+      <h3 class="text-lg font-bold text-slate-800">Histórico de Movimentações</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead><tr class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[11px]">
+            <th class="py-3 px-4">Data/Hora</th><th class="py-3 px-4">Tipo</th><th class="py-3 px-4">Produto</th><th class="py-3 px-4 text-right">Qtd</th><th class="py-3 px-4">Observação</th>
+          </tr></thead>
+          <tbody id="tabela-historico" class="divide-y divide-slate-100 text-slate-600"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ================= IMPORTAÇÃO ================= -->
+    <section id="conteudo-importacao" class="hidden space-y-6">
+      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+        <h3 class="text-lg font-bold text-slate-800 mb-4">Importar Planilha Excel</h3>
+        <div class="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center cursor-pointer hover:border-emerald-500 transition-all" onclick="document.getElementById('arquivo-excel').click()">
+          <p class="text-slate-600 font-semibold">Clique para enviar arquivo Excel (.xlsx)</p>
+          <p class="text-slate-400 text-xs mt-2">Colunas esperadas: Codigo, Nome, Unidade, Estoque, Preco</p>
+        </div>
+        <input type="file" id="arquivo-excel" accept=".xlsx,.xls" onchange="importarExcel(event)" class="hidden">
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+        <h3 class="text-lg font-bold text-slate-800 mb-4">Colar Lista de Texto</h3>
+        <textarea id="texto-importacao" rows="6" placeholder="700 amp Dexametasona
+100 cx Luva M" class="w-full p-4 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-mono text-sm"></textarea>
+        <button onclick="processarListaTexto()" class="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm px-6 py-2.5 rounded-lg transition-all">⚡ Processar e Adicionar</button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ================= MODAL PRODUTO ================= -->
+  <div id="modal-produto" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+      <div class="p-6 text-white" style="background:#0f172a;">
+        <h3 class="text-lg font-bold">Cadastrar Produto</h3>
+      </div>
+      <form onsubmit="salvarProduto(event)" class="p-6 space-y-4">
+        <input type="hidden" id="p-id-original">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Código</label>
+          <input type="text" id="p-codigo" required class="w-full p-2.5 border border-slate-200 rounded-lg text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Nome do Produto</label>
+          <input type="text" id="p-nome" required class="w-full p-2.5 border border-slate-200 rounded-lg text-sm">
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Unidade</label>
+            <select id="p-unidade" class="w-full p-2.5 border border-slate-200 rounded-lg text-sm">
+              <option>AMP</option><option>FRS</option><option>UNID</option><option>PCT</option><option>CX</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Preço (R$)</label>
+            <input type="number" id="p-preco" step="0.01" required class="w-full p-2.5 border border-slate-200 rounded-lg text-sm">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Estoque Inicial</label>
+          <input type="number" id="p-estoque" required class="w-full p-2.5 border border-slate-200 rounded-lg text-sm">
+        </div>
+        <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+          <button type="button" onclick="fecharModalProduto()" class="px-4 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-500">Cancelar</button>
+          <button type="submit" class="px-5 py-2 text-white rounded-lg text-sm font-bold" style="background:#10b981;">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= MODAL MOVIMENTAÇÃO ================= -->
+  <div id="modal-movimentacao" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
+      <div class="p-6 text-white" style="background:#0f172a;">
+        <h3 class="text-lg font-bold">Registrar Movimentação</h3>
+      </div>
+      <form onsubmit="salvarMovimentacao(event)" class="p-6 space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Produto</label>
+          <select id="m-produto" required class="w-full p-2.5 border border-slate-200 rounded-lg text-sm"></select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Tipo</label>
+          <select id="m-tipo" class="w-full p-2.5 border border-slate-200 rounded-lg text-sm">
+            <option>Entrada</option><option>Saída</option><option>Devolução</option><option>Ajuste</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Quantidade</label>
+          <input type="number" id="m-quantidade" required min="1" class="w-full p-2.5 border border-slate-200 rounded-lg text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Observação (opcional)</label>
+          <input type="text" id="m-observacao" placeholder="Ex: NF-123456" class="w-full p-2.5 border border-slate-200 rounded-lg text-sm">
+        </div>
+        <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+          <button type="button" onclick="fecharModalMovimentacao()" class="px-4 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-500">Cancelar</button>
+          <button type="submit" class="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold">Confirmar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= NOTIFICAÇÃO ================= -->
+  <div id="notificacao" class="fixed bottom-6 right-6 bg-slate-900 text-white px-5 py-3 rounded-lg shadow-xl flex items-center gap-3 transform transition-all duration-300 z-50 translate-y-20 opacity-0">
+    <div id="notif-spinner" class="hidden spinner"></div>
+    <p id="notificacao-mensagem" class="text-sm font-semibold">Mensagem</p>
+  </div>
+
+  <script>
+    /* ============================================================
+     * CONFIGURAÇÃO
+     * ============================================================ */
+    let URL_SCRIPT = localStorage.getItem('estoquefacil_url_script') || '';
+    let produtos = [];
+    let movimentacoes = [];
+
+    if (URL_SCRIPT) {
+      document.getElementById('tela-config').classList.add('hidden');
+      inicializar();
+    }
+
+    function salvarConfiguracao() {
+      const url = document.getElementById('input-url-script').value.trim();
+      if (!url.startsWith('https://script.google.com/')) {
+        alert('Cole a URL completa do Apps Script (começa com https://script.google.com/)');
+        return;
+      }
+      URL_SCRIPT = url;
+      localStorage.setItem('estoquefacil_url_script', url);
+      document.getElementById('tela-config').classList.add('hidden');
+      inicializar();
+    }
+
+    function inicializar() {
+      configurarAbas();
+      carregarDadosLocais();
+      renderizarTudo();
+      sincronizar();
+      setInterval(sincronizar, 20000); // sincroniza sozinho a cada 20s
+    }
+
+    /* ============================================================
+     * SINCRONIZAÇÃO COM GOOGLE SHEETS
+     * ============================================================ */
+    async function sincronizar() {
+      definirStatusSync('carregando');
+      try {
+        const resp = await fetch(URL_SCRIPT);
+        const dados = await resp.json();
+
+        if (dados.sucesso) {
+          produtos = (dados.produtos || []).map(p => ({
+            id: Number(p.id), codigo: p.codigo, nome: p.nome, unidade: p.unidade,
+            estoque: Number(p.estoque) || 0, preco: Number(p.preco) || 0
+          }));
+          movimentacoes = (dados.movimentacoes || []).map(m => ({
+            id: Number(m.id), data: m.data, tipo: m.tipo, produto: m.produto,
+            quantidade: Number(m.quantidade) || 0, observacao: m.observacao
+          })).reverse();
+
+          salvarDadosLocais();
+          renderizarTudo();
+          definirStatusSync('ok');
+        } else {
+          definirStatusSync('erro');
+        }
+      } catch (erro) {
+        console.error(erro);
+        definirStatusSync('erro');
+      }
+    }
+
+    async function enviarParaServidor(payload) {
+      definirStatusSync('carregando');
+      try {
+        const resp = await fetch(URL_SCRIPT, {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        const resultado = await resp.json();
+        if (!resultado.sucesso) {
+          mostrarNotificacao(resultado.erro || 'Erro ao salvar', true);
+          definirStatusSync('erro');
+          return null;
+        }
+        definirStatusSync('ok');
+        return resultado;
+      } catch (erro) {
+        console.error(erro);
+        mostrarNotificacao('Sem conexão com o servidor. Verifique sua internet.', true);
+        definirStatusSync('erro');
+        return null;
+      }
+    }
+
+    function definirStatusSync(estado) {
+      const dot = document.getElementById('sync-dot');
+      const texto = document.getElementById('sync-texto');
+      if (estado === 'carregando') {
+        dot.className = 'w-2.5 h-2.5 rounded-full bg-yellow-500 pulse-dot';
+        texto.textContent = 'Sincronizando...';
+      } else if (estado === 'ok') {
+        dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500 pulse-dot';
+        texto.textContent = 'Sincronizado';
+      } else {
+        dot.className = 'w-2.5 h-2.5 rounded-full bg-red-500';
+        texto.textContent = 'Sem conexão';
+      }
+    }
+
+    /* ============================================================
+     * ARMAZENAMENTO LOCAL (backup offline)
+     * ============================================================ */
+    function carregarDadosLocais() {
+      produtos = JSON.parse(localStorage.getItem('estoquefacil_produtos') || '[]');
+      movimentacoes = JSON.parse(localStorage.getItem('estoquefacil_movimentacoes') || '[]');
+    }
+    function salvarDadosLocais() {
+      localStorage.setItem('estoquefacil_produtos', JSON.stringify(produtos));
+      localStorage.setItem('estoquefacil_movimentacoes', JSON.stringify(movimentacoes));
+    }
+
+    /* ============================================================
+     * PRODUTOS
+     * ============================================================ */
+    async function salvarProduto(e) {
+      e.preventDefault();
+      const idOriginal = document.getElementById('p-id-original').value;
+      const produto = {
+        codigo: document.getElementById('p-codigo').value.trim(),
+        nome: document.getElementById('p-nome').value.trim(),
+        unidade: document.getElementById('p-unidade').value,
+        preco: parseFloat(document.getElementById('p-preco').value) || 0,
+        estoque: parseInt(document.getElementById('p-estoque').value) || 0
+      };
+
+      let resultado;
+      if (idOriginal) {
+        produto.id = Number(idOriginal);
+        resultado = await enviarParaServidor({ action: 'editarProduto', produto });
+      } else {
+        resultado = await enviarParaServidor({ action: 'addProduto', produto });
+      }
+
+      if (resultado) {
+        mostrarNotificacao(resultado.mensagem);
+        fecharModalProduto();
+        await sincronizar();
+      }
+    }
+
+    async function deletarProduto(id) {
+      if (!confirm('Deseja realmente excluir este produto?')) return;
+      const resultado = await enviarParaServidor({ action: 'deleteProduto', id });
+      if (resultado) {
+        mostrarNotificacao(resultado.mensagem);
+        await sincronizar();
+      }
+    }
+
+    function editarProdutoModal(id) {
+      const p = produtos.find(x => x.id === id);
+      if (!p) return;
+      document.getElementById('p-id-original').value = p.id;
+      document.getElementById('p-codigo').value = p.codigo;
+      document.getElementById('p-nome').value = p.nome;
+      document.getElementById('p-unidade').value = p.unidade;
+      document.getElementById('p-preco').value = p.preco;
+      document.getElementById('p-estoque').value = p.estoque;
+      document.getElementById('modal-produto').classList.remove('hidden');
+    }
+
+    /* ============================================================
+     * MOVIMENTAÇÕES
+     * ============================================================ */
+    async function salvarMovimentacao(e) {
+      e.preventDefault();
+      const movimentacao = {
+        produto: document.getElementById('m-produto').value,
+        tipo: document.getElementById('m-tipo').value,
+        quantidade: parseInt(document.getElementById('m-quantidade').value) || 0,
+        observacao: document.getElementById('m-observacao').value.trim()
+      };
+
+      if (!movimentacao.produto) {
+        mostrarNotificacao('Selecione um produto', true);
+        return;
+      }
+
+      const resultado = await enviarParaServidor({ action: 'addMovimentacao', movimentacao });
+      if (resultado) {
+        mostrarNotificacao(resultado.mensagem);
+        fecharModalMovimentacao();
+        await sincronizar();
+      }
+    }
+
+    /* ============================================================
+     * IMPORTAÇÃO
+     * ============================================================ */
+    function importarExcel(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        const workbook = XLSX.read(e.target.result, { type: 'binary' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(sheet);
+
+        const listaProdutos = json.map(row => ({
+          codigo: String(row['Codigo'] || row['Código'] || '').trim(),
+          nome: String(row['Nome'] || '').trim(),
+          unidade: String(row['Unidade'] || 'UNID').trim(),
+          estoque: parseInt(row['Estoque']) || 0,
+          preco: parseFloat(row['Preco'] || row['Preço']) || 0
+        })).filter(p => p.nome);
+
+        if (listaProdutos.length === 0) {
+          mostrarNotificacao('Nenhum produto válido encontrado na planilha', true);
+          return;
+        }
+
+        const resultado = await enviarParaServidor({ action: 'importarLote', produtos: listaProdutos });
+        if (resultado) {
+          mostrarNotificacao(resultado.mensagem);
+          await sincronizar();
+        }
+        event.target.value = '';
+      };
+      reader.readAsBinaryString(file);
+    }
+
+    async function processarListaTexto() {
+      const texto = document.getElementById('texto-importacao').value.trim();
+      if (!texto) { mostrarNotificacao('Cole uma lista primeiro', true); return; }
+
+      const linhas = texto.split('\n').filter(l => l.trim());
+      const listaProdutos = [];
+
+      linhas.forEach(linha => {
+        const match = linha.trim().match(/^(\d+)\s*(amp\.?|un\.?|frs\.?|cx\.?|pct\.?|unid\.?)?\s+(.+)$/i);
+        if (match) {
+          const quantidade = parseInt(match[1]);
+          let unidade = (match[2] || 'UNID').toUpperCase().replace('.', '');
+          if (unidade.startsWith('AMP')) unidade = 'AMP';
+          else if (unidade.startsWith('FRS')) unidade = 'FRS';
+          else if (unidade.startsWith('CX')) unidade = 'CX';
+          else if (unidade.startsWith('PCT')) unidade = 'PCT';
+          else unidade = 'UNID';
+
+          const nome = match[3].charAt(0).toUpperCase() + match[3].slice(1);
+          listaProdutos.push({ codigo: '', nome, unidade, estoque: quantidade, preco: 0 });
+        }
+      });
+
+      if (listaProdutos.length === 0) {
+        mostrarNotificacao('Nenhuma linha reconhecida. Use o formato: "100 un Nome do Produto"', true);
+        return;
+      }
+
+      const resultado = await enviarParaServidor({ action: 'importarLote', produtos: listaProdutos });
+      if (resultado) {
+        mostrarNotificacao(resultado.mensagem);
+        document.getElementById('texto-importacao').value = '';
+        await sincronizar();
+      }
+    }
+
+    /* ============================================================
+     * RENDERIZAÇÃO
+     * ============================================================ */
+    function renderizarTudo() {
+      renderizarPainel();
+      listarProdutos();
+      listarMovimentacoesTabela();
+      popularSelectProdutos();
+    }
+
+    function renderizarPainel() {
+      const totalItens = produtos.reduce((acc, p) => acc + p.estoque, 0);
+      const patrimonio = produtos.reduce((acc, p) => acc + (p.estoque * p.preco), 0);
+      const criticos = produtos.filter(p => p.estoque <= 10);
+
+      document.getElementById('card-total-itens').textContent = totalItens.toLocaleString('pt-BR');
+      document.getElementById('card-total-produtos').textContent = produtos.length + ' produtos cadastrados';
+      document.getElementById('card-patrimonio').textContent = 'R$ ' + patrimonio.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+      document.getElementById('card-critico').textContent = criticos.length;
+      document.getElementById('card-critico-desc').textContent = criticos.length > 0 ? criticos.length + ' itens em atenção' : 'Tudo seguro!';
+      document.getElementById('card-movimentacoes').textContent = movimentacoes.length;
+
+      const tabelaPainel = document.getElementById('tabela-movimentacoes-painel');
+      tabelaPainel.innerHTML = '';
+      movimentacoes.slice(0, 5).forEach(m => {
+        const badge = m.tipo === 'Entrada' || m.tipo === 'Devolução'
+          ? `<span class="bg-emerald-50 text-emerald-600 text-[10px] font-bold px-2 py-0.5 rounded-full">${m.tipo}</span>`
+          : `<span class="bg-red-50 text-red-500 text-[10px] font-bold px-2 py-0.5 rounded-full">${m.tipo}</span>`;
+        tabelaPainel.innerHTML += `<tr><td class="py-3 font-semibold">${m.produto}</td><td class="py-3 text-xs text-slate-400">${m.data}</td><td class="py-3">${badge}</td><td class="py-3 text-right font-bold">${m.quantidade}</td></tr>`;
+      });
+      if (movimentacoes.length === 0) tabelaPainel.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-slate-400">Nenhuma transação ainda.</td></tr>';
+
+      const listaAlertas = document.getElementById('lista-alertas');
+      if (criticos.length === 0) {
+        listaAlertas.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">Nenhum produto em alerta 🎉</p>';
+      } else {
+        listaAlertas.innerHTML = criticos.map(p => `
+          <div class="flex justify-between items-center bg-red-50/80 border border-red-100 p-3.5 rounded-lg">
+            <div><p class="text-xs font-bold text-red-800">${p.nome}</p><p class="text-[10px] text-slate-400">ID: ${p.id}</p></div>
+            <div class="text-right"><span class="text-sm font-extrabold text-red-600">${p.estoque}</span> <span class="text-[10px] font-bold text-red-500">${p.unidade}</span></div>
+          </div>`).join('');
+      }
+    }
+
+    function listarProdutos() {
+      const tabela = document.getElementById('tabela-produtos');
+      const busca = (document.getElementById('busca-produto').value || '').toLowerCase();
+      const filtrados = produtos.filter(p => p.nome.toLowerCase().includes(busca) || String(p.codigo).toLowerCase().includes(busca));
+
+      tabela.innerHTML = '';
+      if (filtrados.length === 0) {
+        tabela.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-slate-400">Nenhum produto cadastrado.</td></tr>';
+        return;
+      }
+
+      filtrados.forEach(p => {
+        const critico = p.estoque <= 10;
+        const badge = critico
+          ? '<span class="bg-red-50 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded-full">Crítico</span>'
+          : '<span class="bg-emerald-50 text-emerald-600 text-[10px] font-bold px-2 py-0.5 rounded-full">Seguro</span>';
+
+        tabela.innerHTML += `
+          <tr class="hover:bg-slate-50">
+            <td class="py-3 px-4 font-mono font-semibold">${p.codigo}</td>
+            <td class="py-3 px-4 font-bold">${p.nome}</td>
+            <td class="py-3 px-4 text-center text-xs">${p.unidade}</td>
+            <td class="py-3 px-4 text-right">R$ ${p.preco.toFixed(2)}</td>
+            <td class="py-3 px-4 text-right font-extrabold">${p.estoque}</td>
+            <td class="py-3 px-4 text-center">${badge}</td>
+            <td class="py-3 px-4 text-center flex justify-center gap-2">
+              <button onclick="editarProdutoModal(${p.id})" class="text-blue-600 text-xs font-semibold hover:underline">Editar</button>
+              <button onclick="deletarProduto(${p.id})" class="text-red-500 text-xs font-semibold hover:underline">Excluir</button>
+            </td>
+          </tr>`;
+      });
+    }
+
+    function listarMovimentacoesTabela() {
+      const tabela = document.getElementById('tabela-historico');
+      tabela.innerHTML = '';
+      if (movimentacoes.length === 0) {
+        tabela.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-slate-400">Sem registros.</td></tr>';
+        return;
+      }
+      movimentacoes.forEach(m => {
+        const badge = m.tipo === 'Entrada' || m.tipo === 'Devolução'
+          ? `<span class="bg-emerald-50 text-emerald-600 text-[10px] font-bold px-2.5 py-1 rounded-full">${m.tipo}</span>`
+          : `<span class="bg-red-50 text-red-500 text-[10px] font-bold px-2.5 py-1 rounded-full">${m.tipo}</span>`;
+        tabela.innerHTML += `<tr><td class="py-3 px-4 text-xs text-slate-500">${m.data}</td><td class="py-3 px-4">${badge}</td><td class="py-3 px-4 font-bold">${m.produto}</td><td class="py-3 px-4 text-right font-extrabold">${m.quantidade}</td><td class="py-3 px-4 text-xs text-slate-500">${m.observacao || '-'}</td></tr>`;
+      });
+    }
+
+    function popularSelectProdutos() {
+      const select = document.getElementById('m-produto');
+      const valorAtual = select.value;
+      select.innerHTML = '<option value="">-- Selecione o Produto --</option>';
+      produtos.forEach(p => {
+        select.innerHTML += `<option value="${p.nome}">${p.nome} (${p.estoque} ${p.unidade})</option>`;
+      });
+      select.value = valorAtual;
+    }
+
+    /* ============================================================
+     * NAVEGAÇÃO E MODAIS
+     * ============================================================ */
+    const abasInfo = {
+      painel: 'Painel Geral',
+      cadastro: 'Catálogo de Produtos',
+      movimentacoes: 'Movimentações',
+      importacao: 'Importar Dados'
+    };
+
+    function configurarAbas() {
+      Object.keys(abasInfo).forEach(id => {
+        document.getElementById('tab-' + id).textContent = abasInfo[id];
+      });
+      mudarAba('painel');
+    }
+
+    function mudarAba(id) {
+      Object.keys(abasInfo).forEach(k => {
+        document.getElementById('conteudo-' + k).classList.add('hidden');
+        document.getElementById('tab-' + k).className = 'tab-btn py-4 border-b-2 border-transparent text-slate-500 hover:text-slate-800 font-semibold text-sm flex items-center gap-2 transition-all shrink-0';
+      });
+      document.getElementById('conteudo-' + id).classList.remove('hidden');
+      document.getElementById('tab-' + id).className = 'tab-btn py-4 border-b-2 font-bold text-sm flex items-center gap-2 transition-all shrink-0';
+      document.getElementById('tab-' + id).style.borderColor = '#10b981';
+      document.getElementById('tab-' + id).style.color = '#10b981';
+    }
+
+    function abrirModalProduto() {
+      document.getElementById('p-id-original').value = '';
+      document.querySelector('#modal-produto form').reset();
+      document.getElementById('modal-produto').classList.remove('hidden');
+    }
+    function fecharModalProduto() { document.getElementById('modal-produto').classList.add('hidden'); }
+
+    function abrirModalMovimentacao() {
+      popularSelectProdutos();
+      document.querySelector('#modal-movimentacao form').reset();
+      document.getElementById('modal-movimentacao').classList.remove('hidden');
+    }
+    function fecharModalMovimentacao() { document.getElementById('modal-movimentacao').classList.add('hidden'); }
+
+    function mostrarNotificacao(mensagem, erro = false) {
+      const toast = document.getElementById('notificacao');
+      document.getElementById('notificacao-mensagem').textContent = mensagem;
+      toast.style.background = erro ? '#dc2626' : '#0f172a';
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 3500);
+    }
+  </script>
+</body>
+</html>
