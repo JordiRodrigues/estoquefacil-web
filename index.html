@@ -128,7 +128,7 @@
         <table class="w-full text-left text-sm">
           <thead><tr class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[11px]">
             <th class="py-3 px-4">Código</th><th class="py-3 px-4">Nome</th><th class="py-3 px-4 text-center">Unid.</th>
-            <th class="py-3 px-4 text-right">Preço</th><th class="py-3 px-4 text-right">Estoque</th><th class="py-3 px-4 text-center">Status</th><th class="py-3 px-4 text-center">Ações</th>
+            <th class="py-3 px-4 text-right">Preço</th><th class="py-3 px-4 text-right">Estoque</th><th class="py-3 px-4 text-right">Mín.</th><th class="py-3 px-4 text-center">Status</th><th class="py-3 px-4 text-center">Ações</th>
           </tr></thead>
           <tbody id="tabela-produtos" class="divide-y divide-slate-100 text-slate-600"></tbody>
         </table>
@@ -193,8 +193,19 @@
             </select>
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Preço (R$)</label>
-            <input type="number" id="p-preco" step="0.01" required class="w-full p-2.5 border border-slate-200 rounded-lg text-sm">
+            <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Valor de Compra (R$)</label>
+            <input type="number" id="p-preco-compra" step="0.01" required oninput="calcularPrecoVenda()" class="w-full p-2.5 border border-slate-200 rounded-lg text-sm">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Valor de Venda (R$)</label>
+            <input type="number" id="p-preco" step="0.01" required class="w-full p-2.5 border border-emerald-300 bg-emerald-50 rounded-lg text-sm font-semibold">
+            <p class="text-[10px] text-slate-400 mt-1">Calculado automaticamente (+100%). Pode editar se quiser.</p>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Estoque Mínimo</label>
+            <input type="number" id="p-minimo" required value="10" class="w-full p-2.5 border border-slate-200 rounded-lg text-sm">
           </div>
         </div>
         <div>
@@ -300,7 +311,8 @@
         if (dados.sucesso) {
           produtos = (dados.produtos || []).map(p => ({
             id: Number(p.id), codigo: p.codigo, nome: p.nome, unidade: p.unidade,
-            estoque: Number(p.estoque) || 0, preco: Number(p.preco) || 0
+            estoque: Number(p.estoque) || 0, minimo: Number(p.minimo) || 10,
+            precoCompra: Number(p.precoCompra) || 0, preco: Number(p.preco) || 0
           }));
           movimentacoes = (dados.movimentacoes || []).map(m => ({
             id: Number(m.id), data: m.data, tipo: m.tipo, produto: m.produto,
@@ -372,6 +384,11 @@
     /* ============================================================
      * PRODUTOS
      * ============================================================ */
+    function calcularPrecoVenda() {
+      const compra = parseFloat(document.getElementById('p-preco-compra').value) || 0;
+      document.getElementById('p-preco').value = (compra * 2).toFixed(2);
+    }
+
     async function salvarProduto(e) {
       e.preventDefault();
       const idOriginal = document.getElementById('p-id-original').value;
@@ -379,7 +396,9 @@
         codigo: document.getElementById('p-codigo').value.trim(),
         nome: document.getElementById('p-nome').value.trim(),
         unidade: document.getElementById('p-unidade').value,
+        precoCompra: parseFloat(document.getElementById('p-preco-compra').value) || 0,
         preco: parseFloat(document.getElementById('p-preco').value) || 0,
+        minimo: parseInt(document.getElementById('p-minimo').value) || 0,
         estoque: parseInt(document.getElementById('p-estoque').value) || 0
       };
 
@@ -414,7 +433,9 @@
       document.getElementById('p-codigo').value = p.codigo;
       document.getElementById('p-nome').value = p.nome;
       document.getElementById('p-unidade').value = p.unidade;
+      document.getElementById('p-preco-compra').value = p.precoCompra || 0;
       document.getElementById('p-preco').value = p.preco;
+      document.getElementById('p-minimo').value = p.minimo || 10;
       document.getElementById('p-estoque').value = p.estoque;
       document.getElementById('modal-produto').classList.remove('hidden');
     }
@@ -461,7 +482,9 @@
           nome: String(row['Nome'] || '').trim(),
           unidade: String(row['Unidade'] || 'UNID').trim(),
           estoque: parseInt(row['Estoque']) || 0,
-          preco: parseFloat(row['Preco'] || row['Preço']) || 0
+          minimo: parseInt(row['Minimo'] || row['Mínimo'] || row['Estoque Minimo']) || 10,
+          precoCompra: parseFloat(row['PrecoCompra'] || row['Preco Compra'] || row['Valor de Compra']) || 0,
+          preco: parseFloat(row['Preco'] || row['Preço'] || row['Valor de Venda']) || 0
         })).filter(p => p.nome);
 
         if (listaProdutos.length === 0) {
@@ -498,7 +521,7 @@
           else unidade = 'UNID';
 
           const nome = match[3].charAt(0).toUpperCase() + match[3].slice(1);
-          listaProdutos.push({ codigo: '', nome, unidade, estoque: quantidade, preco: 0 });
+          listaProdutos.push({ codigo: '', nome, unidade, estoque: quantidade, minimo: 10, precoCompra: 0, preco: 0 });
         }
       });
 
@@ -528,7 +551,7 @@
     function renderizarPainel() {
       const totalItens = produtos.reduce((acc, p) => acc + p.estoque, 0);
       const patrimonio = produtos.reduce((acc, p) => acc + (p.estoque * p.preco), 0);
-      const criticos = produtos.filter(p => p.estoque <= 10);
+      const criticos = produtos.filter(p => p.estoque <= p.minimo);
 
       document.getElementById('card-total-itens').textContent = totalItens.toLocaleString('pt-BR');
       document.getElementById('card-total-produtos').textContent = produtos.length + ' produtos cadastrados';
@@ -566,12 +589,12 @@
 
       tabela.innerHTML = '';
       if (filtrados.length === 0) {
-        tabela.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-slate-400">Nenhum produto cadastrado.</td></tr>';
+        tabela.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-400">Nenhum produto cadastrado.</td></tr>';
         return;
       }
 
       filtrados.forEach(p => {
-        const critico = p.estoque <= 10;
+        const critico = p.estoque <= p.minimo;
         const badge = critico
           ? '<span class="bg-red-50 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded-full">Crítico</span>'
           : '<span class="bg-emerald-50 text-emerald-600 text-[10px] font-bold px-2 py-0.5 rounded-full">Seguro</span>';
@@ -583,6 +606,7 @@
             <td class="py-3 px-4 text-center text-xs">${p.unidade}</td>
             <td class="py-3 px-4 text-right">R$ ${p.preco.toFixed(2)}</td>
             <td class="py-3 px-4 text-right font-extrabold">${p.estoque}</td>
+            <td class="py-3 px-4 text-right text-slate-500">${p.minimo}</td>
             <td class="py-3 px-4 text-center">${badge}</td>
             <td class="py-3 px-4 text-center flex justify-center gap-2">
               <button onclick="editarProdutoModal(${p.id})" class="text-blue-600 text-xs font-semibold hover:underline">Editar</button>
