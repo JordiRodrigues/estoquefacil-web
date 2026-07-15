@@ -252,6 +252,13 @@
     /* ============================================================
      * CONFIGURAÇÃO
      * ============================================================ */
+    const abasInfo = {
+      painel: 'Painel Geral',
+      cadastro: 'Catálogo de Produtos',
+      movimentacoes: 'Movimentações',
+      importacao: 'Importar Dados'
+    };
+
     let URL_SCRIPT = localStorage.getItem('estoquefacil_url_script') || '';
     let produtos = [];
     let movimentacoes = [];
@@ -613,13 +620,6 @@
     /* ============================================================
      * NAVEGAÇÃO E MODAIS
      * ============================================================ */
-    const abasInfo = {
-      painel: 'Painel Geral',
-      cadastro: 'Catálogo de Produtos',
-      movimentacoes: 'Movimentações',
-      importacao: 'Importar Dados'
-    };
-
     function configurarAbas() {
       Object.keys(abasInfo).forEach(id => {
         document.getElementById('tab-' + id).textContent = abasInfo[id];
